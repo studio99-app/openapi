@@ -1,0 +1,2026 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Studio99 Indic Typography API",
+    "version": "1.2",
+    "summary": "The typography engine for Indian scripts.",
+    "description": "Studio99 is the typography engine for Indian scripts. It lets creative apps, designers and AI generate exact, beautiful Hindi, Marathi, Gujarati and English text as editable artwork.\n\nThe API returns exact, editable Hindi, Marathi, Gujarati and English text as SVG and PNG. Two write paths:\n\n- **POST /generate**: hand it a phrase, get back several styled calligraphy variants (the engine picks fonts and composition).\n- **POST /render**: hand it a phrase and a `fontId`, get back that exact rendering.\n\nRead paths (`/fonts`, `/library/search`, `/capabilities`, `/health`) are free. Metered calls cost 1 credit per variant or output.\n\nPlans: Free 100 credits/month · Basic ₹999 for 500 · Starter ₹2,999 for 5,000 · Growth ₹9,999 for 25,000 · Enterprise custom.\n\nRate limits: Free: 5/min · Basic: 20/min · Starter: 20/min · Growth: 60/min · Enterprise: 120/min.\n\nText can be typed in the target script (Unicode) or in Latin letters (\"shubh vivah\"); the API transliterates when a language is given or detected.",
+    "termsOfService": "https://studio99.app/terms",
+    "contact": {
+      "name": "ArtoMania Studio (Studio99)",
+      "email": "reach@studio99.app",
+      "url": "https://studio99.app/developers"
+    },
+    "x-logo": {
+      "url": "https://studio99.app/ICON.png",
+      "altText": "Studio99"
+    }
+  },
+  "externalDocs": {
+    "description": "Developer documentation",
+    "url": "https://studio99.app/developers/docs"
+  },
+  "servers": [
+    {
+      "url": "https://studio99.app/api/v1",
+      "description": "Production"
+    }
+  ],
+  "security": [
+    {
+      "ApiKeyAuth": []
+    },
+    {
+      "BearerAuth": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "Generate",
+      "description": "Styled calligraphy variants from a phrase."
+    },
+    {
+      "name": "Render",
+      "description": "Exact rendering of a phrase in a chosen font."
+    },
+    {
+      "name": "Fonts",
+      "description": "Discover the curated font slate."
+    },
+    {
+      "name": "Library",
+      "description": "Inkora ready-made artworks."
+    },
+    {
+      "name": "Meta",
+      "description": "Health and capability discovery (no key needed)."
+    }
+  ],
+  "paths": {
+    "/generate": {
+      "post": {
+        "tags": [
+          "Generate"
+        ],
+        "operationId": "generate",
+        "summary": "Generate calligraphy variants",
+        "description": "Returns up to `count` styled variants of the phrase, each as an editable SVG (plus PNG if requested). Costs 1 credit per variant returned. Text length up to 150 characters on paid plans; `count` is capped at 6. Omit `language` to auto-detect. Use `use_case` and `mood` to steer font selection semantically. Free-plan calls return a watermarked JPG `preview` instead of SVG/PNG.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateRequest"
+              },
+              "examples": {
+                "wedding": {
+                  "summary": "Hindi wedding phrase, typed in Latin letters",
+                  "value": {
+                    "text": "shubh vivah",
+                    "language": "hindi",
+                    "use_case": "wedding",
+                    "count": 4
+                  }
+                },
+                "gujaratiPng": {
+                  "summary": "Gujarati, with a PNG alongside the SVG",
+                  "value": {
+                    "text": "શુભ લગ્ન",
+                    "format": "png",
+                    "pngWidth": 1600,
+                    "count": 2
+                  }
+                },
+                "reproducible": {
+                  "summary": "Two-line layout with a fixed seed",
+                  "value": {
+                    "text": "हार्दिक शुभेच्छा",
+                    "lines": 2,
+                    "seed": 42,
+                    "recipe": "flagship"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Variants generated.",
+            "headers": {
+              "X-RateLimit-Limit": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Requests allowed per minute on your plan."
+              },
+              "X-RateLimit-Remaining": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Requests left in the current minute."
+              },
+              "X-RateLimit-Reset": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Unix time (seconds) when the minute window resets."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/GenerateResponse"
+                    },
+                    "usage": {
+                      "$ref": "#/components/schemas/Usage"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid body: missing text, unsupported language/format/engine/align, or text too long (TEXT_TOO_LONG).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, revoked or expired API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The given fontId does not exist (FONT_NOT_FOUND).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-minute rate limit hit (RATE_LIMIT_EXCEEDED) or monthly allowance exhausted (INSUFFICIENT_CREDITS).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "X-RateLimit-Limit": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Requests allowed per minute on your plan."
+              },
+              "X-RateLimit-Remaining": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Requests left in the current minute."
+              },
+              "X-RateLimit-Reset": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Unix time (seconds) when the minute window resets."
+              }
+            }
+          },
+          "500": {
+            "description": "The engine failed (GENERATION_FAILED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/render": {
+      "post": {
+        "tags": [
+          "Render"
+        ],
+        "operationId": "render",
+        "summary": "Render a phrase in a specific font",
+        "description": "Deterministic: the same text and fontId always give the same glyphs. Costs 1 credit per call. Get `fontId` values from GET /fonts or from a previous /generate result.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenderRequest"
+              },
+              "example": {
+                "text": "शुभ विवाह",
+                "fontId": "font-uuid",
+                "fontSize": 96,
+                "format": "svg"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Rendered output. The shape depends on `format` and on the plan (Free returns a preview).",
+            "headers": {
+              "X-RateLimit-Limit": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Requests allowed per minute on your plan."
+              },
+              "X-RateLimit-Remaining": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Requests left in the current minute."
+              },
+              "X-RateLimit-Reset": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Unix time (seconds) when the minute window resets."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/RenderResponse"
+                    },
+                    "usage": {
+                      "$ref": "#/components/schemas/Usage"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "text or fontId missing, format not svg/png, or text too long.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, revoked or expired API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "FONT_NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-minute rate limit hit (RATE_LIMIT_EXCEEDED) or monthly allowance exhausted (INSUFFICIENT_CREDITS).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "X-RateLimit-Limit": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Requests allowed per minute on your plan."
+              },
+              "X-RateLimit-Remaining": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Requests left in the current minute."
+              },
+              "X-RateLimit-Reset": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Unix time (seconds) when the minute window resets."
+              }
+            }
+          },
+          "500": {
+            "description": "The engine failed (GENERATION_FAILED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/fonts": {
+      "get": {
+        "tags": [
+          "Fonts"
+        ],
+        "operationId": "listFonts",
+        "summary": "List available fonts",
+        "description": "Free read. Filter by language, mood or use case. Returned `id` values are what /render and /generate accept as `fontId`.",
+        "parameters": [
+          {
+            "name": "language",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "hindi",
+                "marathi",
+                "gujarati",
+                "english",
+                "hi",
+                "mr",
+                "gu",
+                "en"
+              ]
+            }
+          },
+          {
+            "name": "mood",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "elegant",
+                "festive",
+                "playful",
+                "romantic",
+                "serious",
+                "spiritual"
+              ]
+            }
+          },
+          {
+            "name": "use_case",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "certificates",
+                "greetings",
+                "invitations",
+                "logos",
+                "names",
+                "occasions",
+                "posters",
+                "quotes",
+                "birthday",
+                "casual",
+                "festive",
+                "formal",
+                "memorial",
+                "religious",
+                "wedding"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Font list.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/FontsResponse"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Unsupported language, mood or use_case value.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, revoked or expired API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The engine failed (GENERATION_FAILED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/library/search": {
+      "get": {
+        "tags": [
+          "Library"
+        ],
+        "operationId": "searchLibrary",
+        "summary": "Search the Inkora library",
+        "description": "Free read. Full-text match on display name, English text and Devanagari text. Page size is capped per plan (free 10, basic 10, starter 25, growth 50, enterprise 100).",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Search phrase, in any supported script or Latin letters."
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Category slug."
+          },
+          {
+            "name": "language",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Language code as stored on the artwork (e.g. hi, mr, gu)."
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching artworks with pagination.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/LibrarySearchResponse"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, revoked or expired API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Library not available on this plan, or LIBRARY_COMING_SOON while the public library rollout is pending.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The engine failed (GENERATION_FAILED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/library/{id}": {
+      "get": {
+        "tags": [
+          "Library"
+        ],
+        "operationId": "getLibraryItem",
+        "summary": "Artwork details",
+        "description": "Free read. `id` may be the artwork id, its shortId or its slug.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Artwork with its available file formats.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/LibraryItemDetail"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, revoked or expired API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "LIBRARY_COMING_SOON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Artwork not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The engine failed (GENERATION_FAILED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/library/{id}/download": {
+      "get": {
+        "tags": [
+          "Library"
+        ],
+        "operationId": "downloadLibraryItem",
+        "summary": "Get a short-lived download URL for an artwork file",
+        "description": "Costs 1 credit. Returns a signed URL valid for 5 minutes. `format` defaults to PNG.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "PNG",
+                "JPG",
+                "SVG"
+              ],
+              "default": "PNG"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Signed download URL.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/LibraryDownload"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "INVALID_FORMAT: use PNG, JPG or SVG.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, revoked or expired API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "LIBRARY_COMING_SOON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Artwork not found, or that format is not available for it (FORMAT_NOT_AVAILABLE).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The engine failed (GENERATION_FAILED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/library/{id}/render-svg": {
+      "get": {
+        "tags": [
+          "Library"
+        ],
+        "operationId": "renderLibraryItemSvg",
+        "summary": "Re-render a library artwork as a clean SVG",
+        "description": "Costs 1 credit. Only for artworks whose detail response has `canRenderSvg: true` (they carry a fontId and result text).",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Editable SVG of the artwork.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/LibraryRenderSvg"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, revoked or expired API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "LIBRARY_COMING_SOON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Artwork not found or cannot be re-rendered.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The engine failed (GENERATION_FAILED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/capabilities": {
+      "get": {
+        "tags": [
+          "Meta"
+        ],
+        "operationId": "capabilities",
+        "summary": "Capability discovery",
+        "description": "No key needed. Static metadata for AI agents and integrators: languages, formats, semantic vocabularies, endpoints, MCP URL.",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Capabilities.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Capabilities"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "data"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": [
+          "Meta"
+        ],
+        "operationId": "health",
+        "summary": "Health check",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Service is up.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "ok"
+                      ]
+                    },
+                    "version": {
+                      "type": "string"
+                    },
+                    "product": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "status": "ok",
+                  "version": "1.2",
+                  "product": "Studio99 Indic Typography API"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "ApiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Key",
+        "description": "Create keys at https://accounts.studio99.app/dashboard/products/studio99-api"
+      },
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The same API key, sent as a Bearer token."
+      }
+    },
+    "schemas": {
+      "Usage": {
+        "type": "object",
+        "description": "Monthly allowance meter, returned on metered calls. Consumers of this API are billed in credits: 1 credit per variant returned by /generate, 1 credit per output from /render, 1 credit per library download.",
+        "properties": {
+          "monthlyUsed": {
+            "type": "integer",
+            "description": "Credits used so far this billing month."
+          },
+          "monthlyLimit": {
+            "type": "integer",
+            "description": "Monthly credit allowance. -1 means uncapped (Enterprise contract or internal channel)."
+          },
+          "remaining": {
+            "type": "integer",
+            "description": "Credits left this month. -1 means uncapped."
+          },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "credits"
+            ],
+            "description": "Present when the credits model is enforced."
+          },
+          "creditsCharged": {
+            "type": "integer",
+            "description": "Credits debited by this call (credits model only)."
+          },
+          "license": {
+            "type": "string",
+            "enum": [
+              "commercial",
+              "preview-non-commercial"
+            ],
+            "description": "Licence that applies to the returned assets. Free-plan output is a watermarked preview with no commercial licence."
+          }
+        },
+        "required": [
+          "monthlyUsed",
+          "monthlyLimit",
+          "remaining"
+        ]
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "AUTHENTICATION_REQUIRED",
+                  "INVALID_INPUT",
+                  "TEXT_TOO_LONG",
+                  "FONT_NOT_FOUND",
+                  "INVALID_FORMAT",
+                  "FORMAT_NOT_AVAILABLE",
+                  "LIBRARY_COMING_SOON",
+                  "RATE_LIMIT_EXCEEDED",
+                  "INSUFFICIENT_CREDITS",
+                  "GENERATION_FAILED"
+                ]
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ]
+          }
+        },
+        "required": [
+          "success",
+          "error"
+        ]
+      },
+      "PngOutput": {
+        "type": "object",
+        "description": "Transparent PNG, base64-encoded (no data: prefix).",
+        "properties": {
+          "base64": {
+            "type": "string",
+            "contentEncoding": "base64",
+            "contentMediaType": "image/png"
+          },
+          "width": {
+            "type": "integer"
+          },
+          "height": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "base64",
+          "width",
+          "height"
+        ]
+      },
+      "PreviewJpg": {
+        "type": "object",
+        "description": "Free-plan preview: a small watermarked JPG with no commercial licence. Upgrade for clean SVG/PNG.",
+        "properties": {
+          "base64": {
+            "type": "string",
+            "contentEncoding": "base64",
+            "contentMediaType": "image/jpeg"
+          },
+          "width": {
+            "type": "integer"
+          },
+          "height": {
+            "type": "integer"
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "jpg"
+            ]
+          },
+          "watermarked": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "commercialLicense": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          }
+        },
+        "required": [
+          "base64",
+          "width",
+          "height",
+          "format",
+          "watermarked",
+          "commercialLicense"
+        ]
+      },
+      "LibraryItem": {
+        "type": "object",
+        "description": "An Inkora library artwork (ready-made text art).",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "shortId": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "textEnglish": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "textDevanagari": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "thumbnailUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "previewUrl": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uri"
+          },
+          "pricingTier": {
+            "type": "string",
+            "enum": [
+              "FREE",
+              "PRO"
+            ]
+          },
+          "category": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "slug": {
+                "type": "string"
+              }
+            }
+          },
+          "language": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "code": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "required": [
+          "id",
+          "shortId",
+          "slug",
+          "displayName",
+          "thumbnailUrl",
+          "pricingTier"
+        ]
+      },
+      "GenerateRequest": {
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 150,
+            "description": "The phrase, in the target script or in Latin letters."
+          },
+          "language": {
+            "type": "string",
+            "enum": [
+              "hindi",
+              "marathi",
+              "gujarati",
+              "english",
+              "hi",
+              "mr",
+              "gu",
+              "en"
+            ],
+            "description": "Omit to auto-detect."
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 6,
+            "default": 4,
+            "description": "Variants to return; 1 credit each."
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "svg",
+              "png"
+            ],
+            "default": "svg",
+            "description": "\"png\" adds a `png` object to each variant alongside the SVG."
+          },
+          "pngWidth": {
+            "type": "integer",
+            "description": "Target PNG width in px (clamped to your plan's ceiling)."
+          },
+          "fontId": {
+            "type": "string",
+            "description": "Pin every variant to one font (from GET /fonts)."
+          },
+          "use_case": {
+            "type": "string",
+            "enum": [
+              "certificates",
+              "greetings",
+              "invitations",
+              "logos",
+              "names",
+              "occasions",
+              "posters",
+              "quotes",
+              "birthday",
+              "casual",
+              "festive",
+              "formal",
+              "memorial",
+              "religious",
+              "wedding"
+            ],
+            "description": "Semantic font steer."
+          },
+          "mood": {
+            "type": "string",
+            "enum": [
+              "elegant",
+              "festive",
+              "playful",
+              "romantic",
+              "serious",
+              "spiritual"
+            ],
+            "description": "Semantic font steer."
+          },
+          "style": {
+            "type": "string",
+            "description": "Classic engine only: style hint."
+          },
+          "weight": {
+            "type": "string",
+            "description": "Classic engine only: weight hint."
+          },
+          "engine": {
+            "type": "string",
+            "enum": [
+              "typogen-x",
+              "classic"
+            ],
+            "description": "Overrides the per-key default engine."
+          },
+          "align": {
+            "type": "string",
+            "enum": [
+              "center",
+              "left",
+              "right"
+            ],
+            "default": "center",
+            "description": "Multi-line alignment (typogen-x)."
+          },
+          "lines": {
+            "oneOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "auto"
+                ]
+              },
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 6
+              }
+            ],
+            "description": "\"auto\" (default), 0/1 for a single line, or 2–6 to force that many lines (typogen-x)."
+          },
+          "lineGap": {
+            "type": "number",
+            "description": "Extra vertical gap for left/right aligned layouts (typogen-x)."
+          },
+          "recipe": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            ],
+            "description": "Treatment(s): plain | flagship | duo | free (typogen-x)."
+          },
+          "seed": {
+            "type": "integer",
+            "description": "Same seed + same input = same output (typogen-x)."
+          }
+        }
+      },
+      "GeneratedResult": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "fontId": {
+            "type": "string"
+          },
+          "fontFamily": {
+            "type": "string"
+          },
+          "originalText": {
+            "type": "string",
+            "description": "What you sent."
+          },
+          "resultText": {
+            "type": "string",
+            "description": "The Unicode text actually rendered (after transliteration)."
+          },
+          "fontTier": {
+            "type": "string",
+            "enum": [
+              "FREE",
+              "PRO"
+            ]
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "generated",
+              "curated"
+            ]
+          },
+          "svg": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "The glyph outlines as a single SVG path `d` string."
+              },
+              "width": {
+                "type": "number"
+              },
+              "height": {
+                "type": "number"
+              },
+              "svgString": {
+                "type": "string",
+                "description": "A complete, editable SVG document."
+              }
+            }
+          },
+          "png": {
+            "$ref": "#/components/schemas/PngOutput"
+          },
+          "preview": {
+            "$ref": "#/components/schemas/PreviewJpg"
+          },
+          "commercialLicense": {
+            "type": "boolean"
+          },
+          "label": {
+            "type": "string",
+            "description": "Slate slot label, e.g. \"Flagship\" (typogen-x)."
+          },
+          "archetype": {
+            "type": "string",
+            "description": "Recipe used: plain | flagship | duo | free (typogen-x)."
+          },
+          "lineCount": {
+            "type": "integer",
+            "description": "Lines in the composed layout (typogen-x)."
+          }
+        },
+        "required": [
+          "id",
+          "fontId",
+          "fontFamily",
+          "originalText",
+          "resultText",
+          "fontTier",
+          "source"
+        ]
+      },
+      "GenerateResponse": {
+        "type": "object",
+        "properties": {
+          "generatedResults": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GeneratedResult"
+            }
+          },
+          "libraryResults": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LibraryItem"
+            },
+            "description": "Matching Inkora artworks. Only returned to first-party channel keys."
+          },
+          "metadata": {
+            "type": "object",
+            "properties": {
+              "engine": {
+                "type": "string",
+                "enum": [
+                  "typogen-x",
+                  "classic"
+                ]
+              },
+              "language": {
+                "type": "string"
+              },
+              "align": {
+                "type": "string"
+              },
+              "lines": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "The line split used (typogen-x)."
+              },
+              "seedBase": {
+                "type": "integer"
+              },
+              "transliteration": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "fontSelection": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "Classic engine only."
+              },
+              "processingTimeMs": {
+                "type": "integer"
+              }
+            }
+          }
+        },
+        "required": [
+          "generatedResults",
+          "metadata"
+        ]
+      },
+      "RenderRequest": {
+        "type": "object",
+        "required": [
+          "text",
+          "fontId"
+        ],
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 150
+          },
+          "fontId": {
+            "type": "string"
+          },
+          "fontSize": {
+            "type": "number",
+            "minimum": 8,
+            "maximum": 300,
+            "default": 72
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "svg",
+              "png"
+            ],
+            "default": "svg"
+          },
+          "pngWidth": {
+            "type": "integer"
+          }
+        }
+      },
+      "RenderResponse": {
+        "oneOf": [
+          {
+            "title": "SVG",
+            "type": "object",
+            "properties": {
+              "svgString": {
+                "type": "string"
+              },
+              "width": {
+                "type": "number"
+              },
+              "height": {
+                "type": "number"
+              },
+              "format": {
+                "type": "string",
+                "enum": [
+                  "svg"
+                ]
+              }
+            },
+            "required": [
+              "svgString",
+              "width",
+              "height",
+              "format"
+            ]
+          },
+          {
+            "title": "PNG",
+            "type": "object",
+            "properties": {
+              "png": {
+                "$ref": "#/components/schemas/PngOutput"
+              },
+              "width": {
+                "type": "number"
+              },
+              "height": {
+                "type": "number"
+              },
+              "format": {
+                "type": "string",
+                "enum": [
+                  "png"
+                ]
+              }
+            },
+            "required": [
+              "png",
+              "width",
+              "height",
+              "format"
+            ]
+          },
+          {
+            "title": "Free-plan preview",
+            "type": "object",
+            "properties": {
+              "preview": {
+                "$ref": "#/components/schemas/PreviewJpg"
+              },
+              "width": {
+                "type": "number"
+              },
+              "height": {
+                "type": "number"
+              },
+              "format": {
+                "type": "string",
+                "enum": [
+                  "jpg"
+                ]
+              },
+              "commercialLicense": {
+                "type": "boolean",
+                "enum": [
+                  false
+                ]
+              }
+            },
+            "required": [
+              "preview",
+              "width",
+              "height",
+              "format",
+              "commercialLicense"
+            ]
+          }
+        ]
+      },
+      "Font": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Use as `fontId`."
+          },
+          "name": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "family": {
+            "type": "string"
+          },
+          "languages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "style": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "weight": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tier": {
+            "type": "string",
+            "enum": [
+              "FREE",
+              "PRO"
+            ]
+          },
+          "sampleText": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "categories": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "mood": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "suitableFor": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "tier"
+        ]
+      },
+      "FontsResponse": {
+        "type": "object",
+        "properties": {
+          "fonts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Font"
+            }
+          },
+          "filters": {
+            "type": "object",
+            "properties": {
+              "language": {
+                "type": "string"
+              },
+              "mood": {
+                "type": "string"
+              },
+              "use_case": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "required": [
+          "fonts"
+        ]
+      },
+      "LibrarySearchResponse": {
+        "type": "object",
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LibraryItem"
+            }
+          },
+          "pagination": {
+            "type": "object",
+            "properties": {
+              "page": {
+                "type": "integer"
+              },
+              "limit": {
+                "type": "integer"
+              },
+              "total": {
+                "type": "integer"
+              },
+              "totalPages": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "page",
+              "limit",
+              "total",
+              "totalPages"
+            ]
+          }
+        },
+        "required": [
+          "results",
+          "pagination"
+        ]
+      },
+      "LibraryItemDetail": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/LibraryItem"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "files": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "format": {
+                      "type": "string"
+                    },
+                    "fileUrl": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "objectMetadata": {
+                "description": "Engine metadata (fontId, resultText) when the artwork can be re-rendered."
+              },
+              "mainDeliverable": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        ]
+      },
+      "LibraryDownload": {
+        "type": "object",
+        "properties": {
+          "downloadUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "PNG",
+              "JPG",
+              "SVG"
+            ]
+          },
+          "pricingTier": {
+            "type": "string"
+          },
+          "fileSize": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "width": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "height": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "availableFormats": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "canRenderSvg": {
+            "type": "boolean"
+          },
+          "expiresIn": {
+            "type": "integer",
+            "description": "Seconds until the URL expires (300)."
+          }
+        },
+        "required": [
+          "downloadUrl",
+          "format",
+          "expiresIn"
+        ]
+      },
+      "LibraryRenderSvg": {
+        "type": "object",
+        "properties": {
+          "svgString": {
+            "type": "string"
+          },
+          "width": {
+            "type": "number"
+          },
+          "height": {
+            "type": "number"
+          },
+          "fontFamily": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "svgString",
+          "width",
+          "height"
+        ]
+      },
+      "Capabilities": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "languages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "scripts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "formats": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "supportsExactText": {
+            "type": "boolean"
+          },
+          "supportsCalligraphy": {
+            "type": "boolean"
+          },
+          "supportsAutoLanguageDetection": {
+            "type": "boolean"
+          },
+          "supportsAutoTransliteration": {
+            "type": "boolean"
+          },
+          "supportsLibrarySearch": {
+            "type": "boolean"
+          },
+          "supportsMultiline": {
+            "type": "boolean"
+          },
+          "semantics": {
+            "type": "object",
+            "properties": {
+              "moods": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "useCases": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "generateOptions": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "endpoints": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "auth": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "docs": {
+            "type": "string",
+            "format": "uri"
+          },
+          "mcp": {
+            "type": "string",
+            "format": "uri"
+          },
+          "version": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "x-studio99": {
+    "creditsModelEnforced": true,
+    "mcp": "https://mcp.studio99.app/api/mcp",
+    "benchmark": "https://studio99.app/developers/benchmark",
+    "pricing": "https://studio99.app/developers/pricing"
+  }
+}
